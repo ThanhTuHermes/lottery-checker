@@ -1,13 +1,24 @@
 import Fastify from 'fastify';
 import cors from '@fastify/cors';
+import rateLimit from '@fastify/rate-limit';
 import { query } from './db/conn.js';
 import checkTicket from './services/checker.js';
 
-const fastify = Fastify({ logger: true });
+const fastify = Fastify({
+  logger: true,
+  trustProxy: true,
+});
 
 await fastify.register(cors, {
-  origin: true,
+  origin: [
+    'https://reasons-routing-strengths-charlotte.trycloudflare.com',
+    'http://localhost:3000',
+  ],
   methods: ['GET', 'POST', 'OPTIONS'],
+});
+
+await fastify.register(rateLimit, {
+  global: false,
 });
 
 // Health check
@@ -17,7 +28,14 @@ fastify.get('/api/health', async () => ({
 }));
 
 // Check ticket
-fastify.post('/api/check-ticket', async (request, reply) => {
+fastify.post('/api/check-ticket', {
+  config: {
+    rateLimit: {
+      max: 20,
+      timeWindow: 60000,
+    },
+  },
+}, async (request, reply) => {
   const { ticketNumber, drawDate } = request.body || {};
 
   if (!ticketNumber || !drawDate) {

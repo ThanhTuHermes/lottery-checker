@@ -6,7 +6,7 @@ const pool = new pg.Pool({
   port: parseInt(process.env.DB_PORT || '5432'),
   database: process.env.DB_NAME || 'lottery_checker',
   user: process.env.DB_USER || 'lottery',
-  password: process.env.DB_PASSWORD || 'lottery2026',
+  password: process.env.DB_PASSWORD,
   max: 20,
   idleTimeoutMillis: 30000,
   connectionTimeoutMillis: 5000,

@@ -9,14 +9,30 @@ import sys, os, json, re, difflib
 from datetime import datetime, date
 import urllib.request
 import psycopg2
+from psycopg2 import pool
+from psycopg2.extras import execute_values
 
 DB = {
     "host": os.getenv("DB_HOST", "localhost"),
     "port": int(os.getenv("DB_PORT", "5432")),
     "dbname": os.getenv("DB_NAME", "lottery_checker"),
     "user": os.getenv("DB_USER", "lottery"),
-    "password": os.getenv("DB_PASSWORD", "lottery2026"),
+    "password": os.getenv("DB_PASSWORD"),
 }
+
+db_pool = None
+
+def get_db_pool():
+    global db_pool
+    if db_pool is None:
+        db_pool = pool.SimpleConnectionPool(1, 10, **DB)
+    return db_pool
+
+def close_db_pool():
+    global db_pool
+    if db_pool is not None:
+        db_pool.closeall()
+        db_pool = None
 
 draw_date_override = None  # Set by --date arg
 
@@ -316,63 +332,94 @@ def cross_validate(src1, src2):
 # ─── DB operations ────────────────────────────────────────────────────────────
 
 def save_to_db(draw_date, region, provinces, source_name):
-    conn = psycopg2.connect(**DB)
-    cur = conn.cursor()
+    if not provinces:
+        return 0
 
-    # Get source_id
-    cur.execute("SELECT id FROM lottery_sources WHERE name = %s", (source_name,))
-    row = cur.fetchone()
-    source_id = row[0] if row else 1
+    pool = get_db_pool()
+    conn = pool.getconn()
+    try:
+        cur = conn.cursor()
 
-    prize_ranks = {"dac_biet": 1, "nhat": 2, "nhi": 3, "ba": 4, "tu": 5, "nam": 6, "sau": 7, "bay": 8, "tam": 9}
+        # Get source_id
+        cur.execute("SELECT id FROM lottery_sources WHERE name = %s", (source_name,))
+        row = cur.fetchone()
+        source_id = row[0] if row else 1
 
-    for prov in provinces:
-        cur.execute("""
+        prize_ranks = {"dac_biet": 1, "nhat": 2, "nhi": 3, "ba": 4, "tu": 5, "nam": 6, "sau": 7, "bay": 8, "tam": 9}
+
+        # 1. Bulk insert draws
+        draw_args = [
+            (draw_date, region, prov["mauso"], prov["tinh"], prov["mauso"], source_id)
+            for prov in provinces
+        ]
+        sql_draws = """
             INSERT INTO lottery_draws (draw_date, region, province_code, province_name, draw_code, source_id)
-            VALUES (%s, %s, %s, %s, %s, %s)
+            VALUES %s
             ON CONFLICT (draw_date, region, province_code) DO UPDATE SET
                 province_name = EXCLUDED.province_name,
                 draw_code = EXCLUDED.draw_code,
                 fetched_at = NOW()
-            RETURNING id
-        """, (draw_date, region, prov["mauso"], prov["tinh"], prov["mauso"], source_id))
-        draw_id = cur.fetchone()[0]
+            RETURNING id, province_code
+        """
+        returned_draws = execute_values(cur, sql_draws, draw_args, fetch=True)
+        draw_id_map = {prov_code: draw_id for draw_id, prov_code in returned_draws}
 
-        for prize_name, nums in prov["giai"].items():
-            rank = prize_ranks.get(prize_name, 9)
-            for num in nums:
-                cur.execute("""
-                    INSERT INTO lottery_prizes (draw_id, prize_name, prize_rank, winning_number)
-                    VALUES (%s, %s, %s, %s)
-                    ON CONFLICT DO NOTHING
-                """, (draw_id, prize_name, rank, num))
+        # 2. Bulk insert prizes
+        prize_args = []
+        for prov in provinces:
+            draw_id = draw_id_map.get(prov["mauso"])
+            if not draw_id:
+                continue
+            for prize_name, nums in prov["giai"].items():
+                rank = prize_ranks.get(prize_name, 9)
+                for num in nums:
+                    prize_args.append((draw_id, prize_name, rank, num))
 
-    conn.commit()
-    cur.close()
-    conn.close()
+        if prize_args:
+            sql_prizes = """
+                INSERT INTO lottery_prizes (draw_id, prize_name, prize_rank, winning_number)
+                VALUES %s
+                ON CONFLICT DO NOTHING
+            """
+            execute_values(cur, sql_prizes, prize_args)
+
+        conn.commit()
+        cur.close()
+    except Exception as e:
+        conn.rollback()
+        raise e
+    finally:
+        pool.putconn(conn)
+
     return len(provinces)
 
 
 def log_validation(region, draw_date, match_rate, mismatches):
-    conn = psycopg2.connect(**DB)
-    cur = conn.cursor()
-    cur.execute("""
-        CREATE TABLE IF NOT EXISTS crawl_validation (
-            id SERIAL PRIMARY KEY,
-            region VARCHAR(20),
-            draw_date DATE,
-            match_rate FLOAT,
-            mismatches JSONB,
-            validated_at TIMESTAMPTZ DEFAULT NOW()
-        )
-    """)
-    cur.execute("""
-        INSERT INTO crawl_validation (region, draw_date, match_rate, mismatches)
-        VALUES (%s, %s, %s, %s)
-    """, (region, draw_date, match_rate, json.dumps(mismatches, ensure_ascii=False)))
-    conn.commit()
-    cur.close()
-    conn.close()
+    pool = get_db_pool()
+    conn = pool.getconn()
+    try:
+        cur = conn.cursor()
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS crawl_validation (
+                id SERIAL PRIMARY KEY,
+                region VARCHAR(20),
+                draw_date DATE,
+                match_rate FLOAT,
+                mismatches JSONB,
+                validated_at TIMESTAMPTZ DEFAULT NOW()
+            )
+        """)
+        cur.execute("""
+            INSERT INTO crawl_validation (region, draw_date, match_rate, mismatches)
+            VALUES (%s, %s, %s, %s)
+        """, (region, draw_date, match_rate, json.dumps(mismatches, ensure_ascii=False)))
+        conn.commit()
+        cur.close()
+    except Exception as e:
+        conn.rollback()
+        raise e
+    finally:
+        pool.putconn(conn)
 
 
 # ─── Main ─────────────────────────────────────────────────────────────────────
@@ -441,8 +488,11 @@ def main():
     global draw_date_override
     draw_date_override = args.date
 
-    for region in regions:
-        crawl_region(region, draw_date_override)
+    try:
+        for region in regions:
+            crawl_region(region, draw_date_override)
+    finally:
+        close_db_pool()
 
 
 if __name__ == "__main__":
