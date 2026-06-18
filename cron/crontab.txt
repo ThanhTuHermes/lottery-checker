@@ -1,0 +1,12 @@
+#!/bin/bash
+# Crontab cho XSKT — chạy 15p sau khi mở thưởng
+# Thêm vào crontab: crontab /home/ubuntu/lottery-checker/cron/crontab.txt
+
+# Miền Nam: 16:15 mở → 16:30 crawl
+30 16 * * * /usr/bin/env bash -c 'cd /home/ubuntu/lottery-checker && DB_HOST=localhost python3 workers/crawl_sox.py --region south >> /home/ubuntu/lottery-checker/logs/crawl_$(date +\%Y\%m\%d).log 2>&1'
+
+# Miền Trung: 17:15 mở → 17:30 crawl
+30 17 * * * /usr/bin/env bash -c 'cd /home/ubuntu/lottery-checker && DB_HOST=localhost python3 workers/crawl_sox.py --region central >> /home/ubuntu/lottery-checker/logs/crawl_$(date +\%Y\%m\%d).log 2>&1'
+
+# Miền Bắc: 18:30 mở → 18:45 crawl
+45 18 * * * /usr/bin/env bash -c 'cd /home/ubuntu/lottery-checker && DB_HOST=localhost python3 workers/crawl_sox.py --region north >> /home/ubuntu/lottery-checker/logs/crawl_$(date +\%Y\%m\%d).log 2>&1'

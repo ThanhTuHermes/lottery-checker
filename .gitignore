@@ -1,0 +1,9 @@
+node_modules/
+__pycache__/
+*.pyc
+.env
+logs/
+data/
+pgdata/
+frontend/.next/
+frontend/out/

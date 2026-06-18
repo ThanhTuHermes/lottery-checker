@@ -1,0 +1,56 @@
+version: "3.9"
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: lottery-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: lottery_checker
+      POSTGRES_USER: lottery
+      POSTGRES_PASSWORD: lottery2026
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./backend/src/db/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql
+      - ./backend/src/db/seed.sql:/docker-entrypoint-initdb.d/02-seed.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U lottery -d lottery_checker"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  api:
+    build: ./backend
+    container_name: lottery-api
+    restart: unless-stopped
+    ports:
+      - "3001:3001"
+    environment:
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: lottery_checker
+      DB_USER: lottery
+      DB_PASSWORD: lottery2026
+      NODE_ENV: production
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  worker:
+    build: ./workers
+    container_name: lottery-worker
+    restart: unless-stopped
+    environment:
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: lottery_checker
+      DB_USER: lottery
+      DB_PASSWORD: lottery2026
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+volumes:
+  pgdata:
