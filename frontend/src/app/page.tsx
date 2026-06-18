@@ -46,6 +46,340 @@ const REGION_LABELS: Record<string, string> = {
   north: "Miền Bắc",
 };
 
+interface ConfettiParticle {
+  id: number;
+  left: number;
+  delay: number;
+  duration: number;
+  size: number;
+  color: string;
+}
+
+function ConfettiShower() {
+  const [particles, setParticles] = useState<ConfettiParticle[]>([]);
+  useEffect(() => {
+    const colors = [
+      "#fbbf24", // amber-400
+      "#f59e0b", // amber-500
+      "#fcd34d", // amber-300
+      "#eab308", // yellow-500
+      "#dfa711", // darker gold
+      "#fffbeb", // gold sheen
+    ];
+    const newParticles = Array.from({ length: 25 }).map((_, i) => ({
+      id: i,
+      left: Math.random() * 100,
+      delay: Math.random() * 0.8,
+      duration: 2 + Math.random() * 1.5,
+      size: 5 + Math.random() * 6,
+      color: colors[Math.floor(Math.random() * colors.length)],
+    }));
+    setParticles(newParticles);
+  }, []);
+
+  return (
+    <div className="absolute inset-0 pointer-events-none overflow-hidden z-20">
+      {particles.map((p) => (
+        <div
+          key={p.id}
+          className="absolute rounded-sm animate-confetti-fall"
+          style={{
+            left: `${p.left}%`,
+            width: `${p.size}px`,
+            height: `${p.size}px`,
+            backgroundColor: p.color,
+            top: `-15px`,
+            animationDelay: `${p.delay}s`,
+            animationDuration: `${p.duration}s`,
+            opacity: 0.9,
+          }}
+        />
+      ))}
+    </div>
+  );
+}
+
+function AmountCounter({ amount }: { amount: number | null }) {
+  const [displayValue, setDisplayValue] = useState<number>(0);
+
+  useEffect(() => {
+    if (amount === null) return;
+    
+    let startTime: number | null = null;
+    const duration = 1000; // 1 second
+    
+    const animate = (timestamp: number) => {
+      if (!startTime) startTime = timestamp;
+      const progress = timestamp - startTime;
+      const percentage = Math.min(progress / duration, 1);
+      
+      const ease = 1 - Math.pow(2, -10 * percentage); // easeOutExpo
+      
+      setDisplayValue(Math.floor(ease * amount));
+      
+      if (percentage < 1) {
+        requestAnimationFrame(animate);
+      }
+    };
+    
+    requestAnimationFrame(animate);
+  }, [amount]);
+
+  if (amount === null) return <span>Chưa có trị giá</span>;
+
+  return <span>{displayValue.toLocaleString("vi-VN")}đ</span>;
+}
+
+const playChaChing = () => {
+  if (typeof window === "undefined") return;
+  const AudioContextClass = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+  if (!AudioContextClass) return;
+
+  const ctx = new AudioContextClass();
+  
+  // Coin chime 1
+  const osc1 = ctx.createOscillator();
+  const gain1 = ctx.createGain();
+  osc1.type = "sine";
+  osc1.frequency.setValueAtTime(850, ctx.currentTime);
+  osc1.frequency.exponentialRampToValueAtTime(1200, ctx.currentTime + 0.08);
+  gain1.gain.setValueAtTime(0.15, ctx.currentTime);
+  gain1.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.15);
+  
+  osc1.connect(gain1);
+  gain1.connect(ctx.destination);
+  
+  // Coin chime 2 (triggered slightly later, higher pitch)
+  const osc2 = ctx.createOscillator();
+  const gain2 = ctx.createGain();
+  osc2.type = "sine";
+  osc2.frequency.setValueAtTime(1500, ctx.currentTime + 0.08);
+  osc2.frequency.exponentialRampToValueAtTime(1900, ctx.currentTime + 0.25);
+  gain2.gain.setValueAtTime(0.0, ctx.currentTime);
+  gain2.gain.setValueAtTime(0.18, ctx.currentTime + 0.08);
+  gain2.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.35);
+  
+  osc2.connect(gain2);
+  gain2.connect(ctx.destination);
+
+  // Coin chime 3 (harmonics for metal sheen)
+  const osc3 = ctx.createOscillator();
+  const gain3 = ctx.createGain();
+  osc3.type = "triangle";
+  osc3.frequency.setValueAtTime(2200, ctx.currentTime + 0.1);
+  gain3.gain.setValueAtTime(0.0, ctx.currentTime);
+  gain3.gain.setValueAtTime(0.08, ctx.currentTime + 0.1);
+  gain3.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.3);
+
+  osc3.connect(gain3);
+  gain3.connect(ctx.destination);
+
+  osc1.start();
+  osc1.stop(ctx.currentTime + 0.2);
+  
+  osc2.start(ctx.currentTime + 0.08);
+  osc2.stop(ctx.currentTime + 0.4);
+
+  osc3.start(ctx.currentTime + 0.1);
+  osc3.stop(ctx.currentTime + 0.4);
+};
+
+const getRankText = (prize: string) => {
+  switch (prize) {
+    case "dac_biet": return "ĐB";
+    case "phu_dac_biet": return "PĐB";
+    case "khuyen_khich": return "KK";
+    case "nhat": return "1";
+    case "nhi": return "2";
+    case "ba": return "3";
+    case "tu": return "4";
+    case "nam": return "5";
+    case "sau": return "6";
+    case "bay": return "7";
+    case "tam": return "8";
+    default: return "G";
+  }
+};
+
+const formatDateVN = (dateStr: string) => {
+  if (!dateStr) return "";
+  const [year, month, day] = dateStr.split("-");
+  return `${day}/${month}/${year}`;
+};
+
+const getPrizeIcon = (prize: string) => {
+  switch (prize) {
+    case "dac_biet": return "👑";
+    case "phu_dac_biet": return "⭐";
+    case "khuyen_khich": return "🍀";
+    case "nhat": return "🥇";
+    case "nhi": return "🥈";
+    case "ba": return "🥉";
+    case "tu": return "🎗️";
+    case "nam": return "🎖️";
+    case "sau": return "🎟️";
+    case "bay": return "🎫";
+    case "tam": return "🎯";
+    default: return "💰";
+  }
+};
+
+const getClaimBadge = (days: number) => {
+  if (days <= 0) {
+    return {
+      text: "Hết hạn đổi",
+      classes: "bg-red-50 text-red-700 border border-red-200"
+    };
+  }
+  if (days === 1) {
+    return {
+      text: "Hạn cuối hôm nay!",
+      classes: "bg-orange-100 text-orange-800 border border-orange-200 animate-pulse font-bold"
+    };
+  }
+  if (days <= 7) {
+    return {
+      text: `Còn ${days} ngày`,
+      classes: "bg-amber-100 text-amber-800 border border-amber-200 animate-pulse font-semibold"
+    };
+  }
+  return {
+    text: `Còn ${days} ngày`,
+    classes: "bg-green-50 text-green-700 border border-green-200"
+  };
+};
+
+function PrizeCard({ m, i, total }: { m: Match; i: number; total: number }) {
+  const [tiltStyle, setTiltStyle] = useState<React.CSSProperties>({});
+  
+  const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
+    const card = e.currentTarget;
+    const rect = card.getBoundingClientRect();
+    
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+    
+    const centerX = rect.width / 2;
+    const centerY = rect.height / 2;
+    const px = (x - centerX) / centerX;
+    const py = (y - centerY) / centerY;
+    
+    const maxTilt = 8; // Max tilt 8 degrees
+    const rX = -py * maxTilt;
+    const rY = px * maxTilt;
+    
+    setTiltStyle({
+      transform: `perspective(1000px) rotateX(${rX}deg) rotateY(${rY}deg) scale3d(1.02, 1.02, 1.02)`,
+      transition: "transform 0.1s ease-out, box-shadow 0.1s ease-out",
+      boxShadow: "0 20px 30px rgba(0, 0, 0, 0.15)",
+    });
+  };
+
+  const handleMouseLeave = () => {
+    setTiltStyle({
+      transform: "perspective(1000px) rotateX(0deg) rotateY(0deg) scale3d(1, 1, 1)",
+      transition: "transform 0.5s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.5s cubic-bezier(0.16, 1, 0.3, 1)",
+    });
+  };
+
+  const countdown = getClaimBadge(m.days_left);
+  const isSpecial = m.prize === "dac_biet" || m.prize === "phu_dac_biet";
+  const rankBadgeClass = isSpecial ? "rank-badge-gold" : "rank-badge-silver";
+
+  return (
+    <div
+      className="animate-deal-card"
+      style={{
+        marginTop: i > 0 ? "-1.5rem" : "0px",
+        zIndex: total - i,
+        animationDelay: `${i * 100}ms`
+      }}
+    >
+      <div
+        onMouseMove={handleMouseMove}
+        onMouseLeave={handleMouseLeave}
+        style={tiltStyle}
+        className="bg-[#fffdf9] text-stone-900 border-2 border-amber-400 rounded-2xl overflow-hidden shadow-xl cursor-pointer relative transform-gpu holographic-shimmer select-none"
+      >
+        {/* Red/Gold side ribbon */}
+        <div className="absolute left-0 top-0 bottom-0 w-3 bg-gradient-to-b from-red-600 via-amber-400 to-red-600"></div>
+
+        <div className="p-5 pl-7">
+          {/* Top info and badge */}
+          <div className="flex justify-between items-start flex-wrap gap-2 mb-3">
+            <div>
+              <div className="flex items-center gap-2">
+                {/* Rank Badge with glowing pulse animation */}
+                <span className={`flex items-center justify-center w-7 h-7 rounded-full text-[10px] font-black border-2 ${rankBadgeClass} shrink-0 shadow-sm font-mono`}>
+                  {getRankText(m.prize)}
+                </span>
+                
+                <span className="text-xl">{getPrizeIcon(m.prize)}</span>
+                <h3 className="font-cinzel text-base md:text-lg font-black text-red-700 uppercase tracking-wide">
+                  {PRIZE_LABELS[m.prize] || m.prize}
+                </h3>
+                
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    playChaChing();
+                  }}
+                  className="p-1 rounded-full bg-amber-50 hover:bg-amber-100 border border-amber-200/60 text-stone-500 hover:text-amber-600 transition-all flex items-center justify-center w-6 h-6 cursor-pointer hover:scale-110 active:scale-95 shadow-sm"
+                  title="Nghe âm thanh chiến thắng"
+                >
+                  🔊
+                </button>
+              </div>
+              <p className="text-[10px] text-stone-500 font-bold tracking-wider uppercase mt-1.5 ml-9">
+                ĐÀI {m.province} • MIỀN {REGION_LABELS[m.region] || m.region}
+              </p>
+            </div>
+
+            <div className="text-right">
+              <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-black ${countdown.classes}`}>
+                <span className="mr-1 w-1 h-1 rounded-full bg-current"></span>
+                {countdown.text}
+              </span>
+              <p className="text-[9px] text-stone-400 mt-0.5">Hạn: {formatDateVN(m.claim_deadline)}</p>
+            </div>
+          </div>
+
+          {/* Reward Details Box */}
+          <div className="bg-gradient-to-r from-red-50 to-amber-50/50 border border-amber-100 rounded-xl p-3 flex flex-col sm:flex-row sm:items-center justify-between gap-2 shadow-inner relative z-10">
+            <div>
+              <span className="text-[9px] text-stone-400 uppercase tracking-wider block font-bold">Số tiền trúng thưởng</span>
+              <span className="text-2xl font-extrabold bg-gradient-to-r from-red-700 via-amber-600 to-red-800 bg-clip-text text-transparent">
+                <AmountCounter amount={m.reward_amount} />
+              </span>
+            </div>
+            <div className="text-left sm:text-right border-t sm:border-t-0 sm:border-l border-amber-200/40 pt-1.5 sm:pt-0 sm:pl-3">
+              <span className="text-[9px] text-stone-400 uppercase tracking-wider block font-bold">
+                Mã vé • Số trúng
+              </span>
+              <div className="font-mono text-xs font-bold text-stone-600">
+                Kỳ vé: <span className="text-stone-800">{m.draw_code || "N/A"}</span>
+              </div>
+              <div className="text-xs text-stone-500">
+                Số trúng: <strong className="font-mono text-green-600 font-extrabold text-sm">{m.winning_number}</strong>
+              </div>
+            </div>
+          </div>
+
+          {/* Inked Stamp Overlay */}
+          <div className="absolute right-4 top-1/2 -translate-y-1/2 opacity-10 pointer-events-none select-none transform rotate-12 z-0">
+            <div className="border-4 border-double border-red-600 rounded-full w-20 h-20 flex items-center justify-center flex-col text-red-600 font-black tracking-widest text-[10px] p-2">
+              <span>KẾT QUẢ</span>
+              <span className="text-xs">TRÚNG</span>
+              <span>THƯỞNG</span>
+            </div>
+          </div>
+
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function Home() {
   const [inputValue, setInputValue] = useState("");
   const [drawDate, setDrawDate] = useState("");
@@ -150,60 +484,6 @@ export default function Home() {
     } finally {
       setLoading(false);
     }
-  };
-
-  // Format helpers
-  const formatMoney = (amount: number | null) => {
-    if (amount === null) return "Chưa có trị giá";
-    return amount.toLocaleString("vi-VN") + "đ";
-  };
-
-  const formatDateVN = (dateStr: string) => {
-    if (!dateStr) return "";
-    const [year, month, day] = dateStr.split("-");
-    return `${day}/${month}/${year}`;
-  };
-
-  const getPrizeIcon = (prize: string) => {
-    switch (prize) {
-      case "dac_biet": return "👑";
-      case "phu_dac_biet": return "⭐";
-      case "khuyen_khich": return "🍀";
-      case "nhat": return "🥇";
-      case "nhi": return "🥈";
-      case "ba": return "🥉";
-      case "tu": return "🎗️";
-      case "nam": return "🎖️";
-      case "sau": return "🎟️";
-      case "bay": return "🎫";
-      case "tam": return "🎯";
-      default: return "💰";
-    }
-  };
-
-  const getClaimBadge = (days: number) => {
-    if (days <= 0) {
-      return {
-        text: "Hết hạn đổi",
-        classes: "bg-red-50 text-red-700 border border-red-200"
-      };
-    }
-    if (days === 1) {
-      return {
-        text: "Hạn cuối hôm nay!",
-        classes: "bg-orange-100 text-orange-800 border border-orange-200 animate-pulse font-bold"
-      };
-    }
-    if (days <= 7) {
-      return {
-        text: `Còn ${days} ngày`,
-        classes: "bg-amber-100 text-amber-800 border border-amber-200 animate-pulse font-semibold"
-      };
-    }
-    return {
-      text: `Còn ${days} ngày`,
-      classes: "bg-green-50 text-green-700 border border-green-200"
-    };
   };
 
   return (
@@ -377,79 +657,11 @@ export default function Home() {
                   </div>
 
                   {/* Stacked matches list */}
-                  <div className="flex flex-col gap-3 relative mt-2">
-                    {result.matches.map((m, i) => {
-                      const countdown = getClaimBadge(m.days_left);
-                      return (
-                        <div
-                          key={i}
-                          className="bg-[#fffdf9] text-stone-900 border-2 border-amber-400 rounded-2xl overflow-hidden shadow-xl hover:shadow-2xl transition-all duration-300 hover:-translate-y-2 hover:scale-[1.02] active:scale-[0.99] origin-center cursor-pointer relative"
-                          style={{
-                            marginTop: i > 0 ? "-1.5rem" : "0px",
-                            zIndex: result.matches.length - i
-                          }}
-                        >
-                          {/* Red/Gold side ribbon */}
-                          <div className="absolute left-0 top-0 bottom-0 w-3 bg-gradient-to-b from-red-600 via-amber-400 to-red-600"></div>
-
-                          <div className="p-5 pl-7">
-                            {/* Top info and badge */}
-                            <div className="flex justify-between items-start flex-wrap gap-2 mb-3">
-                              <div>
-                                <div className="flex items-center gap-1.5">
-                                  <span className="text-xl">{getPrizeIcon(m.prize)}</span>
-                                  <h3 className="font-cinzel text-lg font-black text-red-700 uppercase tracking-wide">
-                                    {PRIZE_LABELS[m.prize] || m.prize}
-                                  </h3>
-                                </div>
-                                <p className="text-[10px] text-stone-500 font-bold tracking-wider uppercase mt-0.5">
-                                  ĐÀI {m.province} • MIỀN {REGION_LABELS[m.region] || m.region}
-                                </p>
-                              </div>
-
-                              <div className="text-right">
-                                <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-black ${countdown.classes}`}>
-                                  <span className="mr-1 w-1 h-1 rounded-full bg-current"></span>
-                                  {countdown.text}
-                                </span>
-                                <p className="text-[9px] text-stone-400 mt-0.5">Hạn: {formatDateVN(m.claim_deadline)}</p>
-                              </div>
-                            </div>
-
-                            {/* Reward Details Box */}
-                            <div className="bg-gradient-to-r from-red-50 to-amber-50/50 border border-amber-100 rounded-xl p-3 flex flex-col sm:flex-row sm:items-center justify-between gap-2 shadow-inner">
-                              <div>
-                                <span className="text-[9px] text-stone-400 uppercase tracking-wider block font-bold">Số tiền trúng thưởng</span>
-                                <span className="text-2xl font-extrabold bg-gradient-to-r from-red-700 via-amber-600 to-red-800 bg-clip-text text-transparent">
-                                  {formatMoney(m.reward_amount)}
-                                </span>
-                              </div>
-                              <div className="text-left sm:text-right border-t sm:border-t-0 sm:border-l border-amber-200/40 pt-1.5 sm:pt-0 sm:pl-3">
-                                <span className="text-[9px] text-stone-400 uppercase tracking-wider block font-bold">
-                                  Mã vé • Số trúng
-                                </span>
-                                <div className="font-mono text-xs font-bold text-stone-600">
-                                  Kỳ vé: <span className="text-stone-800">{m.draw_code || "N/A"}</span>
-                                </div>
-                                <div className="text-xs text-stone-500">
-                                  Số trúng: <strong className="font-mono text-green-600 font-extrabold text-sm">{m.winning_number}</strong>
-                                </div>
-                              </div>
-                            </div>
-
-                            {/* Inked Stamp Overlay */}
-                            <div className="absolute right-4 top-1/2 -translate-y-1/2 opacity-10 pointer-events-none select-none transform rotate-12">
-                              <div className="border-4 border-double border-red-600 rounded-full w-20 h-20 flex items-center justify-center flex-col text-red-600 font-black tracking-widest text-[10px] p-2">
-                                <span>KẾT QUẢ</span>
-                                <span className="text-xs">TRÚNG</span>
-                                <span>THƯỞNG</span>
-                              </div>
-                            </div>
-
-                          </div>
-                        </div>
-                      );
-                    })}
+                  <div className="flex flex-col gap-3 relative mt-2 min-h-[100px]">
+                    <ConfettiShower />
+                    {result.matches.map((m, i) => (
+                      <PrizeCard key={i} m={m} i={i} total={result.matches.length} />
+                    ))}
                   </div>
                 </div>
               )}
