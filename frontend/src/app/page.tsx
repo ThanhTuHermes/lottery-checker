@@ -100,25 +100,29 @@ function ConfettiShower() {
 }
 
 function AmountCounter({ amount }: { amount: number | null }) {
-  const [displayValue, setDisplayValue] = useState<number>(0);
+  const [displayValue, setDisplayValue] = useState(0);
 
   useEffect(() => {
-    if (amount === null) return;
+    if (amount === null || amount === 0) return;
     
     let startTime: number | null = null;
-    const duration = 1000; // 1 second
+    // Thời gian chạy linh hoạt: 500ms mỗi 10 triệu, tối thiểu 600ms, tối đa 2s
+    const duration = Math.max(600, Math.min(2000, (amount / 10_000_000) * 500));
     
     const animate = (timestamp: number) => {
       if (!startTime) startTime = timestamp;
-      const progress = timestamp - startTime;
-      const percentage = Math.min(progress / duration, 1);
+      const progress = Math.min((timestamp - startTime) / duration, 1);
       
-      const ease = 1 - Math.pow(2, -10 * percentage); // easeOutExpo
+      // Linear interpolation + small ease-out at end
+      const eased = progress < 0.7 ? progress / 0.7 * 0.85 : 0.85 + (progress - 0.7) / 0.3 * 0.15;
       
-      setDisplayValue(Math.floor(ease * amount));
+      const current = Math.round(eased * amount);
+      setDisplayValue(current);
       
-      if (percentage < 1) {
+      if (progress < 1) {
         requestAnimationFrame(animate);
+      } else {
+        setDisplayValue(amount);
       }
     };
     
@@ -127,7 +131,12 @@ function AmountCounter({ amount }: { amount: number | null }) {
 
   if (amount === null) return <span>Chưa có trị giá</span>;
 
-  return <span>{displayValue.toLocaleString("vi-VN")}đ</span>;
+  return (
+    <span className="font-mono font-bold tracking-tight">
+      {displayValue.toLocaleString("vi-VN")}
+      <span className="text-xs">₫</span>
+    </span>
+  );
 }
 
 const playChaChing = () => {
