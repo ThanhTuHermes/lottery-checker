@@ -7,3 +7,8 @@ data/
 pgdata/
 frontend/.next/
 frontend/out/
+minhngoc_response.html
+minhngoc_south_2026-06-17.html
+minhngoc_south_yyyy.html
+noidung_end.html
+test_parse.py
