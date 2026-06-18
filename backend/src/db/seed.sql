@@ -19,12 +19,24 @@ INSERT INTO claim_policies (region, prize_name, valid_days) VALUES
   ('north', 'sau', 30), ('north', 'bay', 30), ('north', 'tam', 30)
 ON CONFLICT (region, prize_name) DO NOTHING;
 
--- Cập nhật reward_amount cho các giải Miền Nam/Trung
-UPDATE lottery_prizes SET reward_amount = 2000000000 WHERE prize_name = 'dac_biet' AND reward_amount IS NULL;
-UPDATE lottery_prizes SET reward_amount = 15000000 WHERE prize_name = 'nhi' AND reward_amount IS NULL;
-UPDATE lottery_prizes SET reward_amount = 10000000 WHERE prize_name = 'ba' AND reward_amount IS NULL;
-UPDATE lottery_prizes SET reward_amount = 3000000 WHERE prize_name = 'tu' AND reward_amount IS NULL;
-UPDATE lottery_prizes SET reward_amount = 1000000 WHERE prize_name = 'nam' AND reward_amount IS NULL;
-UPDATE lottery_prizes SET reward_amount = 400000 WHERE prize_name = 'sau' AND reward_amount IS NULL;
-UPDATE lottery_prizes SET reward_amount = 200000 WHERE prize_name = 'bay' AND reward_amount IS NULL;
-UPDATE lottery_prizes SET reward_amount = 100000 WHERE prize_name = 'tam' AND reward_amount IS NULL;
+-- Cập nhật reward_amount cho các giải Miền Nam/Trung (South/Central)
+UPDATE lottery_prizes p SET reward_amount = 2000000000 FROM lottery_draws d WHERE p.draw_id = d.id AND p.prize_name = 'dac_biet' AND d.region IN ('south', 'central') AND p.reward_amount IS NULL;
+UPDATE lottery_prizes p SET reward_amount = 15000000 FROM lottery_draws d WHERE p.draw_id = d.id AND p.prize_name = 'nhat' AND d.region IN ('south', 'central') AND p.reward_amount IS NULL;
+UPDATE lottery_prizes p SET reward_amount = 15000000 FROM lottery_draws d WHERE p.draw_id = d.id AND p.prize_name = 'nhi' AND d.region IN ('south', 'central') AND p.reward_amount IS NULL;
+UPDATE lottery_prizes p SET reward_amount = 10000000 FROM lottery_draws d WHERE p.draw_id = d.id AND p.prize_name = 'ba' AND d.region IN ('south', 'central') AND p.reward_amount IS NULL;
+UPDATE lottery_prizes p SET reward_amount = 3000000 FROM lottery_draws d WHERE p.draw_id = d.id AND p.prize_name = 'tu' AND d.region IN ('south', 'central') AND p.reward_amount IS NULL;
+UPDATE lottery_prizes p SET reward_amount = 1000000 FROM lottery_draws d WHERE p.draw_id = d.id AND p.prize_name = 'nam' AND d.region IN ('south', 'central') AND p.reward_amount IS NULL;
+UPDATE lottery_prizes p SET reward_amount = 400000 FROM lottery_draws d WHERE p.draw_id = d.id AND p.prize_name = 'sau' AND d.region IN ('south', 'central') AND p.reward_amount IS NULL;
+UPDATE lottery_prizes p SET reward_amount = 200000 FROM lottery_draws d WHERE p.draw_id = d.id AND p.prize_name = 'bay' AND d.region IN ('south', 'central') AND p.reward_amount IS NULL;
+UPDATE lottery_prizes p SET reward_amount = 100000 FROM lottery_draws d WHERE p.draw_id = d.id AND p.prize_name = 'tam' AND d.region IN ('south', 'central') AND p.reward_amount IS NULL;
+
+-- Cập nhật reward_amount cho các giải Miền Bắc (North)
+UPDATE lottery_prizes p SET reward_amount = 500000000 FROM lottery_draws d WHERE p.draw_id = d.id AND p.prize_name = 'dac_biet' AND d.region = 'north' AND p.reward_amount IS NULL;
+UPDATE lottery_prizes p SET reward_amount = 40000000 FROM lottery_draws d WHERE p.draw_id = d.id AND p.prize_name = 'nhat' AND d.region = 'north' AND p.reward_amount IS NULL;
+UPDATE lottery_prizes p SET reward_amount = 5000000 FROM lottery_draws d WHERE p.draw_id = d.id AND p.prize_name = 'nhi' AND d.region = 'north' AND p.reward_amount IS NULL;
+UPDATE lottery_prizes p SET reward_amount = 2000000 FROM lottery_draws d WHERE p.draw_id = d.id AND p.prize_name = 'ba' AND d.region = 'north' AND p.reward_amount IS NULL;
+UPDATE lottery_prizes p SET reward_amount = 400000 FROM lottery_draws d WHERE p.draw_id = d.id AND p.prize_name = 'tu' AND d.region = 'north' AND p.reward_amount IS NULL;
+UPDATE lottery_prizes p SET reward_amount = 200000 FROM lottery_draws d WHERE p.draw_id = d.id AND p.prize_name = 'nam' AND d.region = 'north' AND p.reward_amount IS NULL;
+UPDATE lottery_prizes p SET reward_amount = 100000 FROM lottery_draws d WHERE p.draw_id = d.id AND p.prize_name = 'sau' AND d.region = 'north' AND p.reward_amount IS NULL;
+UPDATE lottery_prizes p SET reward_amount = 60000 FROM lottery_draws d WHERE p.draw_id = d.id AND p.prize_name = 'bay' AND d.region = 'north' AND p.reward_amount IS NULL;
+UPDATE lottery_prizes p SET reward_amount = 40000 FROM lottery_draws d WHERE p.draw_id = d.id AND p.prize_name = 'tam' AND d.region = 'north' AND p.reward_amount IS NULL;

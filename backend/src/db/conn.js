@@ -1,4 +1,6 @@
 // Database connection module
+import * as dotenv from 'dotenv';
+dotenv.config();
 import pg from 'pg';
 
 const pool = new pg.Pool({

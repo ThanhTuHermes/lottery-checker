@@ -9,11 +9,12 @@ const fastify = Fastify({
   trustProxy: true,
 });
 
+const corsOrigins = process.env.CORS_ORIGINS
+  ? process.env.CORS_ORIGINS.split(',').map(o => o.trim())
+  : ['http://localhost:3000'];
+
 await fastify.register(cors, {
-  origin: [
-    'https://reasons-routing-strengths-charlotte.trycloudflare.com',
-    'http://localhost:3000',
-  ],
+  origin: corsOrigins,
   methods: ['GET', 'POST', 'OPTIONS'],
 });
 
@@ -98,8 +99,20 @@ fastify.get('/api/draws/:id', async (request, reply) => {
 });
 
 // Ingest endpoint — crawler POST data vào
-fastify.post('/api/ingest', async (request, reply) => {
-  const { draw_date, region, provinces } = request.body;
+fastify.post('/api/ingest', {
+  config: {
+    rateLimit: {
+      max: 5,
+      timeWindow: 60000,
+    },
+  },
+}, async (request, reply) => {
+  const apiKey = process.env.API_KEY;
+  if (!apiKey || request.headers['x-api-key'] !== apiKey) {
+    return reply.code(401).send({ error: 'Unauthorized: Missing or invalid API key' });
+  }
+
+  const { draw_date, region, provinces } = request.body || {};
 
   if (!draw_date || !region || !provinces?.length) {
     return reply.code(400).send({ error: 'Thiếu draw_date, region, hoặc provinces' });

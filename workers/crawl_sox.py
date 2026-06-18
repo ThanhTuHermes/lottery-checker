@@ -6,6 +6,8 @@ Nguồn 2: xskt.com.vn (validation)
 Chỉ ingest vào DB khi 2 nguồn khớp >= 80% số trúng
 """
 import sys, os, json, re, difflib
+from dotenv import load_dotenv
+load_dotenv()
 from datetime import datetime, date
 import urllib.request
 import psycopg2
@@ -77,31 +79,37 @@ def parse_minhngoc(html, region, target_date=None):
     blocks = re.split(r'class="[^"]*box_kqxs[^"]*"', clean_html)
     first_block = blocks[1] if len(blocks) > 1 else clean_html
 
-    draw_date = target_date
-    if not draw_date:
-        m = re.search(r'/(\d{2})-(\d{2})-(\d{4})\.html', first_block)
+    # Parse date from HTML
+    draw_date = None
+    m = re.search(r'/(\d{2})-(\d{2})-(\d{4})\.html', first_block)
+    if m:
+        draw_date = f"{m.group(3)}-{m.group(2)}-{m.group(1)}"
+    else:
+        m = re.search(r'(\d{2})/(\d{2})/(\d{4})', first_block)
         if m:
             draw_date = f"{m.group(3)}-{m.group(2)}-{m.group(1)}"
-        else:
-            m = re.search(r'(\d{2})/(\d{2})/(\d{4})', first_block)
-            if m:
-                draw_date = f"{m.group(3)}-{m.group(2)}-{m.group(1)}"
 
     if not draw_date:
         dm = re.search(r'var\s+maxday\s*=\s*(\d{4})(\d{2})(\d{2})', html)
         if dm:
             draw_date = f"{dm.group(1)}-{dm.group(2)}-{dm.group(3)}"
         else:
-            draw_date = date.today().isoformat()
+            draw_date = target_date or date.today().isoformat()
 
     provinces = []
     if region == "north":
-        table_match = re.search(r'<table[^>]*class="[^"]*bkqtinhmienbac[^"]*"[^>]*>(.*?)</table>', first_block, re.DOTALL)
+        table_match = re.search(r'<table[^>]*class="[^"]*\bbkqtinhmienbac\b[^"]*"[^>]*>(.*?)</table>', first_block, re.DOTALL)
         if table_match:
             block = table_match.group(1)
+            
+            # Parse draw_code for Northern region (loaive_content)
+            l_match = re.search(r'class="[^"]*\bloaive_content\b[^"]*"[^>]*>(.*?)</div>', block, re.DOTALL)
+            draw_code = re.sub(r'<[^>]*>', '', l_match.group(1)).strip() if l_match else ""
+            
             prov = {
                 "tinh": "Miền Bắc",
                 "mauso": "XSMB",
+                "draw_code": draw_code,
                 "giai": {}
             }
             for cls, prize_name in pm.items():
@@ -115,25 +123,36 @@ def parse_minhngoc(html, region, target_date=None):
             if prov["giai"]:
                 provinces.append(prov)
     else:
-        rightcl_blocks = re.findall(r'<table[^>]*class="[^"]*rightcl[^"]*"[^>]*>(.*?)</table>', first_block, re.DOTALL)
+        rightcl_blocks = re.findall(r'<table[^>]*class="[^"]*\brightcl\b[^"]*"[^>]*>(.*?)</table>', first_block, re.DOTALL)
         if not rightcl_blocks:
             # Fallback for historical pages where class="rightcl" might be missing in HTML body
             leaf_tables = re.findall(r'<table[^>]*>((?:(?!<table).)*?)</table>', first_block, re.DOTALL)
-            rightcl_blocks = [t for t in leaf_tables if re.search(r'class="[^"]*tinh[^"]*"', t)]
+            rightcl_blocks = [t for t in leaf_tables if re.search(r'class="[^"]*\btinh\b[^"]*"', t)]
 
         for block in rightcl_blocks:
             prov = {}
-            tm = re.search(r'<td[^>]*class="[^"]*tinh[^"]*"[^>]*>(.*?)</td>', block, re.DOTALL)
+            tm = re.search(r'<td[^>]*class="[^"]*\btinh\b[^"]*"[^>]*>(.*?)</td>', block, re.DOTALL)
             if not tm:
                 continue
             prov["tinh"] = re.sub(r'<[^>]*>', '', tm.group(1)).strip()
 
-            mm = re.search(r'<td[^>]*class="[^"]*matinh[^"]*"[^>]*>(.*?)</td>', block, re.DOTALL)
-            prov["mauso"] = re.sub(r'<[^>]*>', '', mm.group(1)).strip() if mm else ""
+            mm = re.search(r'<td[^>]*class="[^"]*\bmatinh\b[^"]*"[^>]*>(.*?)</td>', block, re.DOTALL)
+            matinh_text = re.sub(r'<[^>]*>', '', mm.group(1)).strip() if mm else ""
+            
+            # Split matinh_text by the first hyphen to get mauso and draw_code
+            if " - " in matinh_text:
+                parts = matinh_text.split(" - ", 1)
+            elif "-" in matinh_text:
+                parts = matinh_text.split("-", 1)
+            else:
+                parts = [matinh_text]
+                
+            prov["mauso"] = parts[0].strip()
+            prov["draw_code"] = parts[1].strip() if len(parts) > 1 else ""
 
             prov["giai"] = {}
             for cls, prize_name in pm.items():
-                gm = re.search(rf'<td[^>]*class="[^"]*{cls}[^"]*"[^>]*>(.*?)</td>', block, re.DOTALL)
+                gm = re.search(rf'<td[^>]*class="[^"]*\b{cls}\b[^"]*"[^>]*>(.*?)</td>', block, re.DOTALL)
                 if gm:
                     nums = re.findall(r'<div>(.*?)</div>', gm.group(1))
                     nums = [n.strip() for n in nums if n.strip()]
@@ -173,26 +192,32 @@ def fetch_xoso(region, target_date=None):
 
 def parse_xoso(html, region, target_date=None):
     """Parse xskt.com.vn HTML → same format as minhngoc"""
-    draw_date = target_date
-    if not draw_date:
-        m = re.search(r'(\d{2})/(\d{2})/(\d{4})', html)
-        if m:
-            draw_date = f"{m.group(3)}-{m.group(2)}-{m.group(1)}"
+    # Parse date from HTML
+    draw_date = None
+    m = re.search(r'(\d{2})/(\d{2})/(\d{4})', html)
+    if m:
+        draw_date = f"{m.group(3)}-{m.group(2)}-{m.group(1)}"
+    else:
+        dm = re.search(r'var\s+maxday\s*=\s*(\d{4})(\d{2})(\d{2})', html)
+        if dm:
+            draw_date = f"{dm.group(1)}-{dm.group(2)}-{dm.group(3)}"
         else:
-            dm = re.search(r'var\s+maxday\s*=\s*(\d{4})(\d{2})(\d{2})', html)
-            if dm:
-                draw_date = f"{dm.group(1)}-{dm.group(2)}-{dm.group(3)}"
-            else:
-                draw_date = date.today().isoformat()
+            draw_date = target_date or date.today().isoformat()
 
     provinces = []
     if region == "north":
-        table_match = re.search(r'<table[^>]*class="[^"]*result[^"]*"[^>]*>(.*?)</table>', html, re.DOTALL)
+        table_match = re.search(r'<table[^>]*class="[^"]*\bresult\b[^"]*"[^>]*>(.*?)</table>', html, re.DOTALL)
         if table_match:
             table_html = table_match.group(1)
+            
+            # Parse draw_code for North (Mã ĐB)
+            lm = re.search(r'Mã\s+ĐB:\s*<strong[^>]*>(.*?)</strong>', html)
+            draw_code = re.sub(r'<[^>]*>', '', lm.group(1)).strip() if lm else ""
+            
             prov = {
                 "tinh": "Miền Bắc",
                 "mauso": "XSMB",
+                "draw_code": draw_code,
                 "giai": {}
             }
             row_map = {
@@ -223,9 +248,9 @@ def parse_xoso(html, region, target_date=None):
                 provinces.append(prov)
     else:
         table_class = {"south": "tbl-xsmn", "central": "tbl-xsmt"}[region]
-        table_match = re.search(rf'<table[^>]*class="[^"]*{table_class}[^"]*"[^>]*>(.*?)</table>', html, re.DOTALL)
+        table_match = re.search(rf'<table[^>]*class="[^"]*\b{table_class}\b[^"]*"[^>]*>(.*?)</table>', html, re.DOTALL)
         if not table_match:
-            table_match = re.search(r'<table[^>]*class="[^"]*tbl-xs[^"]*"[^>]*>(.*?)</table>', html, re.DOTALL)
+            table_match = re.search(r'<table[^>]*class="[^"]*\btbl-xs\b[^"]*"[^>]*>(.*?)</table>', html, re.DOTALL)
             
         if table_match:
             table_html = table_match.group(1)
@@ -244,6 +269,7 @@ def parse_xoso(html, region, target_date=None):
                     provs_list.append({
                         "tinh": tinh_name,
                         "mauso": mauso,
+                        "draw_code": "",
                         "giai": {}
                     })
                 
@@ -349,7 +375,7 @@ def save_to_db(draw_date, region, provinces, source_name):
 
         # 1. Bulk insert draws
         draw_args = [
-            (draw_date, region, prov["mauso"], prov["tinh"], prov["mauso"], source_id)
+            (draw_date, region, prov["mauso"], prov["tinh"], prov.get("draw_code", ""), source_id)
             for prov in provinces
         ]
         sql_draws = """
@@ -399,16 +425,7 @@ def log_validation(region, draw_date, match_rate, mismatches):
     conn = pool.getconn()
     try:
         cur = conn.cursor()
-        cur.execute("""
-            CREATE TABLE IF NOT EXISTS crawl_validation (
-                id SERIAL PRIMARY KEY,
-                region VARCHAR(20),
-                draw_date DATE,
-                match_rate FLOAT,
-                mismatches JSONB,
-                validated_at TIMESTAMPTZ DEFAULT NOW()
-            )
-        """)
+        # Removed CREATE TABLE IF NOT EXISTS from log_validation function
         cur.execute("""
             INSERT INTO crawl_validation (region, draw_date, match_rate, mismatches)
             VALUES (%s, %s, %s, %s)
@@ -434,6 +451,8 @@ def crawl_region(region, target_date=None):
         html1 = fetch_minhngoc(region, target)
         date1, provs1 = parse_minhngoc(html1, region, target)
         print(f"  [MinhNgoc] {len(provs1)} tỉnh, ngày {date1}")
+        if target and date1 != target:
+            print(f"  [MinhNgoc] ⚠ Warning: parsed date {date1} does not match target date {target}")
     except Exception as e:
         print(f"  [MinhNgoc] LỖI: {e}")
         date1, provs1 = target, []
@@ -443,6 +462,8 @@ def crawl_region(region, target_date=None):
         html2 = fetch_xoso(region, target)
         date2, provs2 = parse_xoso(html2, region, target)
         print(f"  [XoSo]     {len(provs2)} tỉnh, ngày {date2}")
+        if target and date2 != target:
+            print(f"  [XoSo]     ⚠ Warning: parsed date {date2} does not match target date {target}")
     except Exception as e:
         print(f"  [XoSo]     LỖI: {e}")
         date2, provs2 = target, []
