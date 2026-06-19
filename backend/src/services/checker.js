@@ -1,4 +1,5 @@
 // Check ticket — match entered number against DB using SUFFIX matching
+// Only show results for provinces scheduled to draw on that day of week
 import { query } from '../db/conn.js';
 
 export default async function checkTicket(ticketNumber, drawDate) {
@@ -11,8 +12,8 @@ export default async function checkTicket(ticketNumber, drawDate) {
     return { matched: false, error: 'Số vé không hợp lệ (2-7 chữ số)' };
   }
 
-  // Suffix match: RIGHT(ticket, LEN(winning_number)) = winning_number
-  // Giải 8: last 2 digits match, Giải 7: last 3, etc. (excluding dac_biet as it is queried separately)
+  // Schedule filter: only provinces that draw on this day of week
+  // EXTRACT(DOW FROM date) returns 0=Sunday...6=Saturday, matching our schedule
   const sql = `
     SELECT d.draw_date, d.region, d.province_name, d.draw_code,
            p.prize_name, p.winning_number, p.reward_amount, p.prize_rank,
@@ -23,6 +24,13 @@ export default async function checkTicket(ticketNumber, drawDate) {
     WHERE d.draw_date = $1
       AND p.prize_name != 'dac_biet'
       AND RIGHT($2, LENGTH(p.winning_number)) = p.winning_number
+      AND EXISTS (
+        SELECT 1 FROM lottery_schedule s
+        WHERE s.region = d.region
+          AND s.province_name = d.province_name
+          AND s.day_of_week = EXTRACT(DOW FROM $1::date)::int
+          AND s.is_active = true
+      )
     ORDER BY p.prize_rank ASC
   `;
 
@@ -40,13 +48,20 @@ export default async function checkTicket(ticketNumber, drawDate) {
     days_left: dayDiff(addDays(r.draw_date, r.valid_days || 30), new Date()),
   }));
 
-  // Query dac_biet separately to check for Special, Phụ ĐB, and Khuyến Khích prizes
+  // Query dac_biet separately — with schedule filter
   const dbSql = `
     SELECT p.*, d.region, d.draw_date, d.province_name, d.draw_code, cp.valid_days
     FROM lottery_prizes p
     JOIN lottery_draws d ON d.id = p.draw_id
     LEFT JOIN claim_policies cp ON cp.region = d.region AND cp.prize_name = p.prize_name
     WHERE p.prize_name = 'dac_biet' AND d.draw_date = $1
+      AND EXISTS (
+        SELECT 1 FROM lottery_schedule s
+        WHERE s.region = d.region
+          AND s.province_name = d.province_name
+          AND s.day_of_week = EXTRACT(DOW FROM $1::date)::int
+          AND s.is_active = true
+      )
   `;
   const { rows: dbRows } = await query(dbSql, [drawDate]);
 

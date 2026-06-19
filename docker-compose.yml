@@ -15,6 +15,7 @@ services:
       - pgdata:/var/lib/postgresql/data
       - ./backend/src/db/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql
       - ./backend/src/db/seed.sql:/docker-entrypoint-initdb.d/02-seed.sql
+      - ./backend/src/db/schedule_seed.sql:/docker-entrypoint-initdb.d/03-schedule.sql
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${DB_USER} -d ${DB_NAME}"]
       interval: 10s

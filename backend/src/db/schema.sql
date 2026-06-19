@@ -64,6 +64,21 @@ CREATE INDEX IF NOT EXISTS idx_prizes_number ON lottery_prizes(winning_number);
 CREATE INDEX IF NOT EXISTS idx_prizes_draw ON lottery_prizes(draw_id);
 CREATE INDEX IF NOT EXISTS idx_checks_date ON ticket_checks(check_date, ticket_number);
 
+-- 7. Lịch mở thưởng (schedule)
+CREATE TABLE IF NOT EXISTS lottery_schedule (
+    id SERIAL PRIMARY KEY,
+    region VARCHAR(20) NOT NULL CHECK (region IN ('north','central','south')),
+    province_code VARCHAR(20) NOT NULL,
+    province_name VARCHAR(100) NOT NULL,
+    day_of_week INT NOT NULL CHECK (day_of_week BETWEEN 0 AND 6),  -- 0=CN, 1=T2...6=T7
+    draw_time TIME NOT NULL,
+    frequency_per_week INT NOT NULL DEFAULT 1 CHECK (frequency_per_week IN (1,2)),
+    is_active BOOLEAN DEFAULT true,
+    UNIQUE (region, province_code, day_of_week)
+);
+
+CREATE INDEX IF NOT EXISTS idx_schedule_day_region ON lottery_schedule(day_of_week, region);
+
 -- Trigger: tự động cập nhật fetched_at khi upsert draw
 CREATE OR REPLACE FUNCTION update_fetched_at()
 RETURNS TRIGGER AS $$
